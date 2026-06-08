@@ -321,28 +321,59 @@ def targil_4_DP(prices, Rest, Sell, Buy, shuffle=False):
 #-----targil_5-----:
 def targil_5_DP(times, jobs, profits):
 
-    # sorting by end-times:
-    #-----
-    entries = [(times[i],profits[i]) for i in range(jobs)]
-    entries = sorted(entries, key=lambda entry: entry[0][1], reverse=True)
-    sorted_end_times = [entry[0][1] for entry in entries] # this is going to =>
-    # be the list used to binary search traversal and then fetching the coresponding =>
-    # start_time/profit from - entries[].
-    #-----
+    # restructuring the data into lists: entries = [(start, end, profit, original_id), ...]
+    entries = [(times[i][0], times[i][1], profits[i], i + 1) for i in range(jobs)] 
 
-    current_start_time = sorted_end_times[jobs-1] + 1 # initiated to be =>
-    # larger than the last end_time so that the last end_time always latches to it.
+    # sorting jobs by end-time (Ascending):
+    entries.sort(key=lambda x: x[1])
 
-    current_end_time = 0 # that's going to fetch the last end_time =>
-    # available on the first iteration.
+    sorted_end_times = [entry[1] for entry in entries] # this is going to be =>
+    # the list used to binary search jobs and then fetching the coresponding job entry.
 
-    current_idx = 0
-    for i in range(jobs): # NOTE: entry = ([start_time, end_time], profit)
-        current_idx = bisect.bisect_left(sorted_end_times, current_end_time)
+    # cache that store the currently maximum profit achievable:
+    dp_cache = [0] * (jobs + 1) # includes the base: 0 jobs (= 0 profit).
+    
 
-        current_end_time = sorted_end_times[current_idx] # updating for next iteration.
+    for i in range(1, jobs + 1): 
+
+        current_start, _, current_profit, _ = entries[i - 1]
+
+        # using binary-search to find a job that ended BEFORE OR AT our current_start.
+        # the built-in bisec_right returns an index indicating the jobs to the left of =>
+        # that index in- sorted_end_times are all compatible with the condition.
+        compatible_job_idx = bisect.bisect_right(sorted_end_times, current_start)
         
-        #max(, + entries[current_idx][0][1]) # =current profit.
+        #splitting options comparison (2 per each entry in: entries[i] ):
+        #---
+        # option A: Exclude current job (take previous max):
+        exclude_profit = dp_cache[i - 1]
+        # option B: Include current job (take its profit + max profit of previous (time compatible) max profit):
+        include_profit = current_profit + dp_cache[compatible_job_idx]
+        #---
+
+        dp_cache[i] = max(exclude_profit, include_profit)
+    
+    backtracking = []
+    current_i = jobs
+
+    # we traverse the DP array backward, starting from the final calculated maximum.
+    # at each step, we determine if the current job contributed to the total profit:
+    while current_i > 0:
+        current_start, _, _, original_id = entries[current_i - 1]
+
+        # if the profit is greater than it's previous we know that: =>
+        # that job's profit must have been included:
+        if  dp_cache[current_i - 1] < dp_cache[current_i]: 
+            backtracking.append(f"J{original_id:02d}") # => this job was chosen.
+            # jumping to the latest compatible (non-overlapping) end_time:
+            current_i = bisect.bisect_right(sorted_end_times, current_start)  
+
+        # and if the profit is equal to it's previous then: =>
+        # that job's profit was skipped by the algorithm (a better sequence of choices was chosen instead of it.)..
+        else:
+            current_i -= 1 # incrementing the index to check the next profit's comparison and so on...
+            
+    return dp_cache[jobs], backtracking
 #-----targil_5-----:
 
 
@@ -360,10 +391,12 @@ def main():
 
     # DP: 
     # NOTE: uncomment this section:
-    ##-----
-    ## targil 1 dynamically (fast and time/space cheap):
-    # print("minimum total cost: %i." %targil_1_dyn(costs_list))
-    ##-----
+    #-----
+    print("\n|-----targil_1-START-----|\n")
+    # targil 1 dynamically (fast and time/space cheap):
+    print("minimum total cost: %i." %targil_1_dyn(costs_list))
+    print("\n|-----targil_1-END-----|\n\n")
+    #-----
 #-----targil_1-----:
 
 #-----targil_2-----:
@@ -383,16 +416,18 @@ def main():
     
     # DP: 
     # NOTE: uncomment this section:
-    ##-----
-    #targil_2_dyn = targil_2_DP_wrapper
-    #max_total_sum_dyn, sequence_dyn = targil_2_dyn(nums, shuffle=False)
-    #print(f"sequence:      {sequence_dyn}\nmax_total_sum: {max_total_sum_dyn}.") # =>
-    ## here sequence is represented by the index, found it easier to review the order.
-    ##---{
-    #print(targil_2_dyn.cache_info())                                                               # pyright: ignore[reportFunctionMemberAccess]
-    #targil_2_dyn.cache_clear()                                                                     # pyright: ignore[reportFunctionMemberAccess]
-    ##---}
-    ##-----
+    #-----
+    print("\n|-----targil_2-START-----|\n")
+    targil_2_dyn = targil_2_DP_wrapper
+    max_total_sum_dyn, sequence_dyn = targil_2_dyn(nums, shuffle=False)
+    print(f"sequence:      {sequence_dyn}\nmax_total_sum: {max_total_sum_dyn}.") # =>
+    # here sequence is represented by the index, found it easier to review the order.
+    #---{
+    print(targil_2_dyn.cache_info())                                                               # pyright: ignore[reportFunctionMemberAccess]
+    targil_2_dyn.cache_clear()                                                                     # pyright: ignore[reportFunctionMemberAccess]
+    #---}
+    print("\n|-----targil_2-END-----|\n\n")
+    #-----
 #-----targil_2-----:
 
 #-----targil_3-----:
@@ -408,14 +443,16 @@ def main():
     # dungeon = [[random.randint(-10, 11) for _ in range(columns)] for _ in range(rows)]
 
     # NOTE: uncomment this section:
-    ##-----
-    # print(f"rows: {rows}")
-    # print(f"columns: {columns}")
-    # print(f"original dungeon[][]:") 
-    # for row in dungeon: 
-    #     print(row)
-    # print(f"amount of health required: {targil_3_DP(dungeon, rows, columns, shuffle=False)}.")
-    ##-----
+    #-----
+    print("\n|-----targil_3-START-----|\n")
+    print(f"rows: {rows}")
+    print(f"columns: {columns}")
+    print(f"original dungeon[][]:") 
+    for row in dungeon: 
+        print(row)
+    print(f"amount of health required: {targil_3_DP(dungeon, rows, columns, shuffle=False)}.")
+    print("\n|-----targil_3-END-----|\n\n")
+    #-----
 #-----targil_3-----:
 
 #-----targil_4-----:
@@ -450,51 +487,77 @@ def main():
     prices: list[int] = [4,1,3,7,2,3,5]
 
     # NOTE: uncomment this section:
-    ##-----
-    #print(f"prices: {prices}.")
-    #
-    ## initializing the 3 states to their start position:
-    #Rest = 0
-    #Sell = -math.inf
-    #Buy = -prices[0] 
-    #
-    #print(f"Maximum profit: {targil_4_DP(prices[1:], Rest, Sell, Buy, False)}.")
-    ##-----
+    #-----
+    print("\n|-----targil_4-START-----|\n")
+    print(f"prices: {prices}.")
+    
+    # initializing the 3 states to their start position:
+    Rest = 0
+    Sell = -math.inf
+    Buy = -prices[0] 
+    
+    print(f"Maximum profit: {targil_4_DP(prices[1:], Rest, Sell, Buy, False)}.")
+    print("\n|-----targil_4-END-----|\n\n")
+    #-----
 #-----targil_4-----:
 
 #-----targil_5-----:
+    # NOTE: just uncomment the entire thing:
+    ##-----
+    print("\n|-----targil_5-START-----|\n")
     gantt_show_payment = True
 
     start_time_range, end_time_range, start_profit_range, end_profit_range, jobs = 0, 23, 1, 99, 10
-    # AI generated (was a better implementation than mine + the sorting and fitting to-'%jobs'): 
-    times = [sorted((random.randint(start_time_range, end_time_range), random.randint(start_time_range, end_time_range))) for _ in range(jobs)]
+    # generating job profits, start-times and end-times, sorted and filtered for the comfort of the eye.
+    # the algorithm's logic would still work if the 'cyclic' job hours could be sliced per sections into =>
+    # different days and fed as a pipline, saving previous best_profits and times, but that's an insane =>
+    # amount of effort (even for me), even though it works in theory and that's enough for me for the time being.
+    #-----
+    times = [(random.randint(start_time_range, end_time_range), random.randint(start_time_range, end_time_range)) for _ in range(jobs)]
+    # print(f"random unsorted times: \n{times}.")
+    times = [(random.sample(range(start_time_range, end_time_range), 2)) if t[0] == t[1] else t for t in times] 
+    # print(f"uniquely resampling 0 lasting jobs: \n{times}.")
+    times = [sorted(time) for time in times]
+    print(f"random sorted times: \n{times}.\n")
     startTime = [t[0] for t in times]
     endTime = [t[1] for t in times]
     profit = [random.randint(start_profit_range, end_profit_range) for _ in range(jobs)]
-    print(f"times: {times}")
-    print(f"startTime: {startTime}.")
-    print(f"endTime:   {endTime}.")
-    print(f"profit:    {profit}.")
+    #-----
 
+    # vertical table: 
+    #---
+    print(f"idx:       {' '.join(f"{i:02d}" for i in range(1, jobs+1))}")
+    print(f"startTime: {' '.join(f"{st:02d}" for st in startTime)}")
+    print(f"endTime:   {' '.join(f"{et:02d}" for et in endTime)}")
+    print(f"profit:    {' '.join(f"{pt:02d}" for pt in profit)}")
+    #---
     print("\nsimple gantt chart: (job", "\\", "time):\n  |", end="")
     for hour in range(end_time_range + 1):
         print(f"{hour:02d}|", end="")
 
     print()
     for job in range(jobs):
-        job_str = f"{job:02d}|"
-        if  gantt_show_payment: 
-            profit_str = f"{profit[job]:02d}|"
+        job_str = f"{job+1:02d}|"
+        profit_str = f"{profit[job]:02d}|" if gantt_show_payment else "##|"
+        
+        interval = endTime[job]-startTime[job]
+        if  interval == 1:
+            job_span = profit_str
+        elif interval == 2:
+            job_span = profit_str * 2
         else:
-            profit_str = "##|"
-        if startTime[job] < endTime[job]:
-            print(job_str + "  |"*startTime[job] + profit_str*(endTime[job]-startTime[job]) + "  |"*(end_time_range-endTime[job]+1))
+            job_span = profit_str + "$$|" * (interval - 2) + profit_str
 
-        elif startTime[job] == endTime[job]:
-            print(job_str + "--|"*(end_time_range+1))
+        prefix_padding = "  |" * startTime[job]
+        suffix_padding = "  |" * ((end_time_range + 1) - endTime[job])
 
+        print(job_str + prefix_padding + job_span + suffix_padding)
 
-    print(f"max profit reachable: {targil_5_DP(times, jobs, profit)}.")
+    max_profit, backtracking = targil_5_DP(times, jobs, profit)
+    print(f"\nmax profit reachable: {max_profit}.")
+    print(f"backtracking best sequence: {backtracking}.")
+    print("\n|-----targil_5-END-----|\n\nthanks.:).")
+    ##-----
 #-----targil_5-----:
 
 main()
